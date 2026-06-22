@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Chora installer — installs the CLI and optionally provisions a self-host server.
+# Multica installer — installs the CLI and optionally provisions a self-host server.
 #
 # Install / upgrade CLI only:
-#   curl -fsSL https://raw.githubusercontent.com/Chora-Inc/Chora-Release/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Chora-Inc/chora/main/scripts/install.sh | bash
 #
 # Install CLI + provision self-host server:
-#   curl -fsSL https://raw.githubusercontent.com/Chora-Inc/Chora-Release/main/scripts/install.sh | bash -s -- --with-server
+#   curl -fsSL https://raw.githubusercontent.com/Chora-Inc/chora/main/scripts/install.sh | bash -s -- --with-server
 #
 # After installation, run `chora setup` to configure your environment.
 #
@@ -15,9 +15,9 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 REPO_URL="https://github.com/Chora-Inc/chora.git"
-REPO_WEB_URL="https://github.com/Chora-Inc/chora"  # without .git, for GitHub web APIs
+REPO_WEB_URL="https://github.com/Chora-Inc/Chora-Release"  # without .git, for GitHub web APIs
 INSTALL_DIR="${CHORA_INSTALL_DIR:-$HOME/.chora/server}"
-BREW_PACKAGE="Chora-Inc/tap/chora"
+BREW_PACKAGE="chora-inc/tap/chora"
 
 # Colors (disabled when not a terminal)
 if [ -t 1 ] || [ -t 2 ]; then
@@ -87,7 +87,7 @@ detect_os() {
     Linux)  OS="linux" ;;
     MINGW*|MSYS*|CYGWIN*)
             fail "This script does not support Windows. Use the PowerShell installer instead:
-  irm https://raw.githubusercontent.com/Chora-Inc/Chora-Release/main/scripts/install.ps1 | iex" ;;
+  irm https://raw.githubusercontent.com/Chora-Inc/chora/main/scripts/install.ps1 | iex" ;;
     *)      fail "Unsupported operating system: $(uname -s). Chora supports macOS, Linux, and Windows." ;;
   esac
 
@@ -115,7 +115,7 @@ install_cli_brew() {
   info "Installing Chora CLI via Homebrew..."
   local brew_log
   brew_log=$(mktemp)
-  if ! brew tap Chora-Inc/tap >"$brew_log" 2>&1; then
+  if ! brew tap chora-inc/tap >"$brew_log" 2>&1; then
     warn "Failed to add Homebrew tap. Falling back to GitHub Releases binary install."
     _dump_brew_log "$brew_log"
     rm -f "$brew_log"
@@ -262,8 +262,8 @@ upgrade_cli_brew() {
 install_cli() {
   if command_exists chora; then
     local current_ver
-    # `chora version` outputs "chora v0.1.13 (commit: abc1234)" — extract just the version
-    current_ver=$(chora version 2>/dev/null | awk '{print $2}' || echo "unknown")
+    # `chora version` outputs "chora 0.3.23 (commit: f46b929eb, built: 2026-06-16T10:11:56Z)" — extract just the version
+    current_ver=$(chora version 2>/dev/null | awk 'NR==1{print $2}' || echo "unknown")
 
     local latest_ver
     latest_ver=$(get_latest_version)
@@ -285,7 +285,7 @@ install_cli() {
     fi
 
     local new_ver
-    new_ver=$(chora version 2>/dev/null | awk '{print $2}' || echo "unknown")
+    new_ver=$(chora version 2>/dev/null | awk 'NR==1{print $2}' || echo "unknown")
     ok "Chora CLI upgraded ($current_ver → $new_ver)"
     return 0
   fi
@@ -357,16 +357,21 @@ setup_server() {
 
   # Generate .env if needed
   if [ ! -f .env ]; then
-    info "Creating .env with random JWT_SECRET..."
+    info "Creating .env with random secrets..."
     cp .env.example .env
-    local jwt
+    local jwt pgpass
     jwt=$(openssl rand -hex 32)
+    pgpass=$(openssl rand -hex 24)
     if [ "$(uname -s)" = "Darwin" ]; then
       sed -i '' "s/^JWT_SECRET=.*/JWT_SECRET=$jwt/" .env
+      sed -i '' "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$pgpass/" .env
+      sed -i '' -E "s#^(DATABASE_URL=postgres://[^:]+:)[^@]*(@.*)#\1$pgpass\2#" .env
     else
       sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$jwt/" .env
+      sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$pgpass/" .env
+      sed -i -E "s#^(DATABASE_URL=postgres://[^:]+:)[^@]*(@.*)#\1$pgpass\2#" .env
     fi
-    ok "Generated .env with random JWT_SECRET"
+    ok "Generated .env with random JWT_SECRET and POSTGRES_PASSWORD"
   else
     ok "Using existing .env"
   fi
@@ -418,11 +423,8 @@ run_default() {
   printf "\n"
   printf "  ${BOLD}Next: configure your environment${RESET}\n"
   printf "\n"
-  printf "     ${CYAN}chora setup${RESET}                # Connect to Chora Cloud (chora.ai)\n"
+  printf "     ${CYAN}chora setup${RESET}                # Connect to Chora Cloud (chora.team)\n"
   printf "     ${CYAN}chora setup self-host${RESET}       # Connect to a self-hosted server\n"
-  printf "\n"
-  printf "  ${BOLD}Self-hosting?${RESET} Install the server first:\n"
-  printf "     curl -fsSL https://raw.githubusercontent.com/Chora-Inc/Chora-Release/main/scripts/install.sh | bash -s -- --with-server\n"
   printf "\n"
 }
 
@@ -460,7 +462,7 @@ run_with_server() {
   printf "  or read the generated code from backend logs when Resend is unset.\n"
   printf "\n"
   printf "  ${BOLD}To stop all services:${RESET}\n"
-  printf "     curl -fsSL https://raw.githubusercontent.com/Chora-Inc/Chora-Release/main/scripts/install.sh | bash -s -- --stop\n"
+  printf "     curl -fsSL https://raw.githubusercontent.com/Chora-Inc/chora/main/scripts/install.sh | bash -s -- --stop\n"
   printf "\n"
 }
 
